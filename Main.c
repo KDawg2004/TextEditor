@@ -1,5 +1,6 @@
 //Author: kaevin Barta
 //Date: 5/20/25
+//File: Main.c
 
 /*
 This file holds the boiler plate for the whole program, opens the program and closes it. But also includes start up to all features like drawing pad and text editor             
@@ -7,9 +8,13 @@ This file holds the boiler plate for the whole program, opens the program and cl
 
 //libs
 #include <gtk/gtk.h>
+#include <stddef.h>
 
 //headers
 #include "drawing.h"
+#include "text.h"
+
+static GtkWidget* color_preview = NULL;
 
 //struct OpenData for passing multiple forms of data through pointers
 typedef struct {
@@ -19,20 +24,12 @@ typedef struct {
     GtkWidget* start_window;
 } OpenData;
 
-
 /*
   Closes window to text editor/drawing pad and frees up application mem
  */
 static void close_window(void)
 {
     close_surface();
-}
-
-// callback to clear the text buffer
-static void clear_text_cb(GtkButton* button, gpointer user_data) {
-    GtkTextView* textview = GTK_TEXT_VIEW(user_data);
-    GtkTextBuffer* buffer = gtk_text_view_get_buffer(textview);
-    gtk_text_buffer_set_text(buffer, "", -1);
 }
 
 /**
@@ -86,29 +83,6 @@ void open_text_editor(GtkButton* button, gpointer user_data)
 
 
 //--- DRAWING PAD CODE ---
-/**
- * Function definition for chaging the brush radius size, this increases the width of the stroke
- *
- * @param range     input for radius
- * @param user_data  Pointer to the data we need (often cast from gpointer).
- */
-static void on_brush_size_changed(GtkRange* range, gpointer user_data);
-
-/**
- * Function definition for options menu.
- *
- * @param button     The GTK button that triggered the callback.
- * @param user_data  Pointer to the data we need (often cast from gpointer).
- */
-static void show_options_popover(GtkButton* button, gpointer user_data);
-
-/**
- * Function definition for help screen, displays useful tips
- *
- * @param button     The GTK button that triggered the callback.
- * @param user_data  Pointer to the data we need (often cast from gpointer).
- */
-static void on_help_clicked(GtkButton* button, gpointer user_data);
 
 /**
  * Opens up drawing application
@@ -189,17 +163,37 @@ static void openDrawingPad(GtkButton* button, gpointer user_data)
     gtk_widget_set_margin_bottom(options_box, 10);
     gtk_widget_set_margin_start(options_box, 10);
     gtk_widget_set_margin_end(options_box, 10);
-
+    
+    
     // Toggle button for brush color
-    GtkWidget* color_toggle = gtk_toggle_button_new_with_label("Toggle Brush Color");
-    gtk_box_append(GTK_BOX(options_box), color_toggle);
+    GtkWidget* brush_color = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, 256, 1);
+    gtk_scale_set_value_pos(GTK_SCALE(brush_color), GTK_POS_RIGHT);
 
-    // Slider for brush size
+    GtkWidget* color_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);  // vertical box
+    GtkWidget* color_label = gtk_label_new("Brush Color");
+    gtk_widget_set_halign(color_label, GTK_ALIGN_START);  // left-align label
+
+    gtk_box_append(GTK_BOX(color_box), color_label);
+    gtk_box_append(GTK_BOX(color_box), brush_color);
+    gtk_box_append(GTK_BOX(options_box), color_box);  // add labeled group to menu
+
+    g_signal_connect(brush_color, "value-changed", G_CALLBACK(on_brush_color_changed), NULL);
+
+    
+    // Brush size scale with label VERTICAL 
     GtkWidget* brush_scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 1, 20, 1);
     gtk_scale_set_value_pos(GTK_SCALE(brush_scale), GTK_POS_RIGHT);
-    gtk_box_append(GTK_BOX(options_box), brush_scale);
-    //function to change size
+
+    GtkWidget* size_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);//vertical box
+    GtkWidget* size_label = gtk_label_new("Brush Size");
+    gtk_widget_set_halign(size_label, GTK_ALIGN_START);//left align label
+
+    gtk_box_append(GTK_BOX(size_box), size_label);
+    gtk_box_append(GTK_BOX(size_box), brush_scale);
+    gtk_box_append(GTK_BOX(options_box), size_box);//add labeled group to options popover
+
     g_signal_connect(brush_scale, "value-changed", G_CALLBACK(on_brush_size_changed), NULL);
+
 
 
     // Clear canvas button
@@ -218,6 +212,12 @@ static void openDrawingPad(GtkButton* button, gpointer user_data)
     g_signal_connect_after(drawing_area, "resize", G_CALLBACK(resize_cb), NULL);
 
     g_signal_connect(options_button, "clicked", G_CALLBACK(show_options_popover), options_popover);
+
+    // Create preview widget somewhere in your options_box
+    color_preview = gtk_frame_new(NULL);
+    gtk_widget_set_size_request(color_preview, 50, 50);  // square preview box
+    gtk_box_append(GTK_BOX(options_box), color_preview);
+
 
     //left click
     drag = gtk_gesture_drag_new();
@@ -240,26 +240,6 @@ static void openDrawingPad(GtkButton* button, gpointer user_data)
 }
 
 
-static void show_options_popover(GtkButton* button, gpointer user_data) {
-    GtkWidget* popover = GTK_WIDGET(user_data);
-    gtk_widget_set_visible(popover, TRUE);
-}
-
-
-static void on_help_clicked(GtkButton* button, gpointer user_data) {
-    GtkWidget* dialog = gtk_message_dialog_new(GTK_WINDOW(user_data), GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK, "This is a simple drawing pad.\nLeft click to draw.\nRight click to clear drawing.");
-    gtk_window_set_title(GTK_WINDOW(dialog), "Help");
-    g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), dialog);
-    gtk_window_present(GTK_WINDOW(dialog));
-
-}
-
-static void on_brush_size_changed(GtkRange* range, gpointer user_data)
-{
-    int value = (int)gtk_range_get_value(range);
-    setRadius(value);
-}
-
 
 /**
  * Activates the appliaction, also serves as the main menu. 
@@ -269,29 +249,47 @@ static void on_brush_size_changed(GtkRange* range, gpointer user_data)
  */
 static void activate(GtkApplication* app, gpointer user_data)
 {
-    //all widgets for home page
+    //widgets
     GtkWidget* start_window;
-    GtkWidget* button;
-    GtkWidget* grid;
+    GtkWidget* main_box;
+    GtkWidget* title_label;
     GtkWidget* button_text_editor;
     GtkWidget* button_drawing_pad;
+    GtkWidget* quit_button;
 
     // Create the start window
     start_window = gtk_application_window_new(app);
-    gtk_window_set_title(GTK_WINDOW(start_window), "Caveman's TextEditor");
-    gtk_window_set_default_size(GTK_WINDOW(start_window), 300, 200);
+    gtk_window_set_title(GTK_WINDOW(start_window), "Caveman's Toolbox");
+    gtk_window_set_default_size(GTK_WINDOW(start_window), 500, 300);
+    gtk_window_set_resizable(GTK_WINDOW(start_window), FALSE);
 
-    //pack buttons
-    grid = gtk_grid_new();
-    gtk_window_set_child(GTK_WINDOW(start_window), grid);
-    gtk_widget_set_halign(grid, GTK_ALIGN_CENTER);
-    
-    // Create buttons
-    button_text_editor = gtk_button_new_with_label("Text Editor");
-    button_drawing_pad = gtk_button_new_with_label("Drawing Pad");
-   
+    // Give it a name for CSS
+    gtk_widget_set_name(start_window, "start-window");
+
+    // Vertical box to stack title & buttons
+    main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+    gtk_widget_set_valign(main_box, GTK_ALIGN_CENTER);
+    gtk_widget_set_halign(main_box, GTK_ALIGN_CENTER);
+    gtk_window_set_child(GTK_WINDOW(start_window), main_box);
+
+    // Big title
+    title_label = gtk_label_new(" Caveman's Toolbox");
+    gtk_widget_set_name(title_label, "title-label");
+    gtk_box_append(GTK_BOX(main_box), title_label);
+
+    // Buttons
+    button_drawing_pad = gtk_button_new_with_label(" Drawing Pad");
+    button_text_editor = gtk_button_new_with_label(" Text Editor");
+
+    gtk_box_append(GTK_BOX(main_box), button_drawing_pad);
+    gtk_box_append(GTK_BOX(main_box), button_text_editor);
+
+    // Quit button
+    quit_button = gtk_button_new_with_label("Quit");
+    gtk_widget_set_name(quit_button, "quit-button");
+    gtk_box_append(GTK_BOX(main_box), quit_button);
+
     // Connect signals
-    //pass the struct
     OpenData* data_editor = g_new(OpenData, 1);
     data_editor->app = app;
     data_editor->start_window = start_window;
@@ -300,21 +298,35 @@ static void activate(GtkApplication* app, gpointer user_data)
     data_drawing->app = app;
     data_drawing->start_window = start_window;
 
-    //waiting for a signal while looping
     g_signal_connect(button_text_editor, "clicked", G_CALLBACK(open_text_editor), data_editor);
     g_signal_connect(button_drawing_pad, "clicked", G_CALLBACK(openDrawingPad), data_drawing);
+    g_signal_connect_swapped(quit_button, "clicked", G_CALLBACK(close_window), start_window);
 
-    //grid set up
-    gtk_grid_attach(GTK_GRID(grid), button_drawing_pad, 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), button_text_editor, 1, 0, 1, 1);
+    //CSS rule container
+    GtkCssProvider* provider = gtk_css_provider_new();
 
-    //quit
-    button = gtk_button_new_with_label("Quit");
-    g_signal_connect_swapped(button, "clicked", G_CALLBACK(close_window), start_window);
-    gtk_grid_attach(GTK_GRID(grid), button, 0, 1, 2, 1);
-    
-    // Show start window
+    //set rules
+    gtk_css_provider_load_from_string(provider,
+        "#start-window { background: linear-gradient(135deg, #1e1e2f, #2e2e3f); }"//background color
+        "#title-label { font-size: 24px; font-weight: bold; color: white; }" //title
+        "button { font-size: 16px; padding: 8px 20px; border-radius: 8px; }" //text and drawing pad
+        "#quit-button { background: #cc3333; color: white; }" //quit
+        "#quit-button:hover { background: #ff5555; }" //quit hover
+    );
+
+    //apply css
+    gtk_style_context_add_provider_for_display(
+        gdk_display_get_default(),
+        GTK_STYLE_PROVIDER(provider),
+        GTK_STYLE_PROVIDER_PRIORITY_USER
+    );
+
+    //free after use
+    g_object_unref(provider);
+
     gtk_window_present(GTK_WINDOW(start_window));
+    
+
 }
 
 
