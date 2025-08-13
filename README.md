@@ -1,0 +1,1 @@
+To make this application function on your own device you must intall gtk 4 on your device, the rest is straight forward. feel free to message me about some bugs i've pointed out in the code through comments. Will update for files saves/load for both features(drawing pad and text editor) 8/13/25 
